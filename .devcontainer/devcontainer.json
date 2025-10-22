@@ -15,16 +15,16 @@
 	// "customizations": {},
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"
-	"image": "ghcr.io/nordquant/ai-agents-crash-course-codespace:latest",
+	"image": "ghcr.io/nordquant/ai-agents-crash-course-codespace:latest-release",
 	"customizations": {
 		"vscode": {
+			"settings": {
+				"extensions.autoUpdate": false,
+				"extensions.autoCheckUpdates": false
+			},
 			"extensions": [
-				"ms-toolsai.jupyter",
-				"ms-python.python",
-				"ms-python.black-formatter",
-				"ms-python.isort",
-				"ms-python.flake8",
-				"GitHub.copilot"
+				"ms-toolsai.jupyter@2025.7.0",
+				"ms-python.python"
 			]
 		},
 		"codespaces": {
@@ -36,7 +36,7 @@
 	"remoteEnv": {
 		"WORKSPACE_FOLDER": "${containerWorkspaceFolder}"
 	},
-	//"postCreateCommand": "bash .devcontainer/setup-container.sh",
+	"postCreateCommand": "[ -d chatkit ] && cd chatkit && npm install || true",
 	//"postAttachCommand": "bash .devcontainer/setup-terminal.sh",
 	// Update port forwarding configuration
 	"forwardPorts": [

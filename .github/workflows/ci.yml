@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: ['*']
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_dispatch:
+
+jobs:
+  lint-and-syntax-check:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/nordquant/ai-agents-crash-course-codespace:latest
+      options: --user root
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Fix ownership of workspace and checkout folder
+      run: |
+        chown -R vscode:vscode /home/vscode
+        chown -R vscode:vscode $GITHUB_WORKSPACE
+      shell: bash
+    - name: Install Python dependencies
+      run: su vscode -c "pip install -r .github/requirements.txt"
+      shell: bash
+
+    - name: Create .env file from secret
+      run: echo "${{ secrets.ENV_FILE }}" > .env
+      shell: bash
+
+    - name: Test Exa Search MCP endpoint
+      run: su vscode -c "python .github/test_exa_mcp.py"
+      shell: bash
+
+    - name: Check Python syntax in chatbot_complete
+      run: |
+        su vscode -c '
+        echo "Checking Python syntax in chatbot_complete directory..."
+        find ./chatbot_complete -name "*.py" -exec python -m py_compile {} \;
+        '
+      shell: bash
+
+    - name: Check Python syntax in rag_setup
+      run: |
+        su vscode -c '
+        echo "Checking Python syntax in rag_setup directory..."
+        find ./rag_setup -name "*.py" -exec python -m py_compile {} \;
+        '
+      shell: bash
+
+
+    - name: Check chatbot folder structure
+      run: |
+        su vscode -c '
+        echo "Checking chatbot folder contains only __init__.py and nutrition_agent.py..."
+        file_count=$(find ./chatbot -type f ! -name "__pycache__" | wc -l)
+        if [ "$file_count" -ne 2 ]; then
+          echo "Error: chatbot folder must contain exactly 2 files: __init__.py and nutrition_agent.py"
+          find ./chatbot -type f
+          exit 1
+        fi
+        if [ ! -f "./chatbot/__init__.py" ] || [ ! -f "./chatbot/nutrition_agent.py" ]; then
+          echo "Error: chatbot folder must contain __init__.py and nutrition_agent.py"
+          exit 1
+        fi
+        echo "✓ chatbot folder structure is correct"
+        '
+      shell: bash
+
+    - name: Check chatbot files match chatbot_complete
+      run: |
+        su vscode -c '
+        echo "Checking that chatbot files match chatbot_complete versions..."
+        if ! diff -q ./chatbot/__init__.py ./chatbot_complete/__init__.py; then
+          echo "Error: chatbot/__init__.py does not match chatbot_complete/__init__.py"
+          exit 1
+        fi
+        if ! diff -q ./chatbot/nutrition_agent.py ./chatbot_complete/nutrition_agent.py; then
+          echo "Error: chatbot/nutrition_agent.py does not match chatbot_complete/nutrition_agent.py"
+          exit 1
+        fi
+        echo "✓ chatbot files match chatbot_complete versions"
+        '
+      shell: bash
+
+    - name: Check notebook syntax
+      run: |
+        su vscode -c '
+        echo "Checking notebook syntax..."
+        # Check notebooks in solutions and notebooks_complete directories
+        find ./solutions -name "*.ipynb" -exec jupyter nbconvert --to python --stdout {} \; > /dev/null
+        find ./notebooks_complete -name "*.ipynb" -exec jupyter nbconvert --to python --stdout {} \; > /dev/null
+        '
+      shell: bash
+
+    - name: Execute notebooks
+      run: |
+        su vscode -c '
+        echo "Executing notebooks in solutions directory..."
+        for notebook in ./solutions/*.ipynb; do
+          if [ -f "$notebook" ]; then
+            echo "Executing: $notebook"
+            jupyter nbconvert --to notebook --execute --inplace "$notebook" || echo "Failed to execute $notebook"
+          fi
+        done
+
+        echo "Executing notebooks in notebooks_complete directory..."
+        for notebook in ./notebooks_complete/*.ipynb; do
+          if [ -f "$notebook" ]; then
+            echo "Executing: $notebook"
+            jupyter nbconvert --to notebook --execute --inplace "$notebook" || echo "Failed to execute $notebook"
+          fi
+        done
+        '
+      shell: bash
+
+    - name: Upload executed notebooks as artifacts
+      uses: actions/upload-artifact@v4
+      if: always() && !env.ACT
+      with:
+        name: executed-notebooks
+        path: |
+          ./solutions/*.ipynb
+          ./notebooks_complete/*.ipynb
+        retention-days: 7
